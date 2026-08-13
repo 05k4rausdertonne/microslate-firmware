@@ -269,6 +269,8 @@ void setup() {
   renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 
   screenDirty = true;
+
+  esp_ota_mark_app_valid_cancel_rollback();
 }
 
 // Enter deep sleep - matches crosspoint pattern

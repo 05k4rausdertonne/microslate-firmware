@@ -1,5 +1,17 @@
 # MicroSlate
 
+> ## Fork notes (lvturner)
+>
+> This fork fixes MicroSlate reverting to stock firmware when installed via the
+> **SD-card OEM bootloader recovery** on a USB-locked Xteink X4 (HID-only USB,
+> no serial). It adds `esp_ota_mark_app_valid_cancel_rollback()` at the end of
+> `setup()` so the flashed slot is marked valid and survives reboots and
+> deep-sleep.
+>
+> - **How to build & flash (SD card):** see [`docs/SD-CARD-INSTALL.md`](docs/SD-CARD-INSTALL.md)
+> - **Build failure on Fedora Silverblue / symlinked `/home`:** run [`scripts/fix-platformio-home-symlink.sh`](scripts/fix-platformio-home-symlink.sh)
+> - The single code change is in [`src/main.cpp`](src/main.cpp) (end of `setup()`).
+
 A dedicated writing firmware for the **Xteink X4** e-paper device. Pairs with any **Bluetooth LE (BLE)** keyboard and saves notes to MicroSD.
 
 ## Features
