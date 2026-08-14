@@ -120,6 +120,66 @@ static void detectOtaApps() {
   DBG_PRINTF("[OTA] Detected %d additional app(s)\n", otaAppCount);
 }
 
+// Write otadata directly so the bootloader boots `dest` next. Bypasses
+// esp_ota_set_boot_partition's esp_image_verify, which rejects valid images
+// with bogus eFuse-rev errors on these OEM bootloaders. CRC32 (LE, no final
+// XOR) covers only the 4-byte ota_seq — same scheme CrossInk's ota_boot uses.
+// `dest` must already hold a valid app; the booted app self-marks valid.
+struct OtaSelectEntry {
+  uint32_t ota_seq;
+  uint8_t  seq_label[20];
+  uint32_t ota_state;
+  uint32_t crc;
+};
+static_assert(sizeof(OtaSelectEntry) == 32, "otadata select entry must be 32 bytes");
+
+static uint32_t otaSeqCrc32(uint32_t seq) {
+  uint32_t crc = 0xFFFFFFFFu;
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(&seq);
+  for (int i = 0; i < 4; i++) {
+    crc ^= p[i];
+    for (int b = 0; b < 8; b++) crc = (crc >> 1) ^ (0xEDB88320u & (uint32_t(-(crc & 1u))));
+  }
+  return crc;
+}
+
+static bool otaBootSwitchTo(const esp_partition_t* dest) {
+  const esp_partition_t* otadata = esp_partition_find_first(
+      ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, NULL);
+  if (!otadata || otadata->size < 2 * SPI_FLASH_SEC_SIZE) return false;
+
+  OtaSelectEntry slots[2] = {};
+  if (esp_partition_read(otadata, 0, &slots[0], sizeof(OtaSelectEntry)) != ESP_OK ||
+      esp_partition_read(otadata, SPI_FLASH_SEC_SIZE, &slots[1], sizeof(OtaSelectEntry)) != ESP_OK)
+    return false;
+
+  int activeIdx = -1;
+  uint32_t activeSeq = 0;
+  for (int i = 0; i < 2; i++) {
+    if (slots[i].ota_seq == 0xFFFFFFFFu) continue;
+    if (slots[i].crc != otaSeqCrc32(slots[i].ota_seq)) continue;
+    if (slots[i].ota_state == 3 || slots[i].ota_state == 4) continue;  // INVALID / ABORTED
+    if (activeIdx < 0 || slots[i].ota_seq > activeSeq) { activeIdx = i; activeSeq = slots[i].ota_seq; }
+  }
+
+  const uint32_t destIdx = static_cast<uint32_t>(dest->subtype) -
+                           static_cast<uint32_t>(ESP_PARTITION_SUBTYPE_APP_OTA_0);
+  uint32_t newSeq = activeSeq + 1;
+  while (((newSeq - 1u) % 2u) != (destIdx % 2u)) ++newSeq;
+
+  OtaSelectEntry next;
+  next.ota_seq = newSeq;
+  memset(next.seq_label, 0xFF, sizeof(next.seq_label));
+  next.ota_state = 0;  // ESP_OTA_IMG_NEW — the booted app marks itself valid
+  next.crc = otaSeqCrc32(next.ota_seq);
+
+  const int targetSlot = (activeIdx == 0) ? 1 : 0;
+  const size_t targetOff = static_cast<size_t>(targetSlot) * SPI_FLASH_SEC_SIZE;
+  if (esp_partition_erase_range(otadata, targetOff, SPI_FLASH_SEC_SIZE) != ESP_OK) return false;
+  if (esp_partition_write(otadata, targetOff, &next, sizeof(next)) != ESP_OK) return false;
+  return true;
+}
+
 // Switch to another OTA app by index into otaApps[]. Non-static so input_handler can call it.
 void switchToOtaApp(int index) {
   if (index < 0 || index >= otaAppCount) return;
@@ -132,7 +192,10 @@ void switchToOtaApp(int index) {
     return;
   }
   DBG_PRINTF("[OTA] Switching to \"%s\" (subtype %d)...\n", otaApps[index].name, subtype);
-  esp_ota_set_boot_partition(target);
+  if (!otaBootSwitchTo(target)) {
+    DBG_PRINTF("[OTA] Raw otadata switch failed; falling back to esp_ota_set_boot_partition\n");
+    esp_ota_set_boot_partition(target);
+  }
   esp_restart();
 }
 
