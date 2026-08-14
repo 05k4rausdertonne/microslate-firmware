@@ -39,16 +39,19 @@ End state: slot with MicroSlate is active; CrossInk is in the other slot.
 ## Switching
 
 - **MicroSlate → CrossInk:** on MicroSlate's main menu, the entry below *Sync*
-  (labelled `OTA Slot 0`/`OTA Slot 1`) is CrossInk — select it. MicroSlate writes
-  otadata directly and reboots into CrossInk.
-- **CrossInk → MicroSlate:** Settings → System → **Switch to MicroSlate** → confirm.
+  labelled **"CrossInk"** — select it, confirm. MicroSlate writes otadata directly
+  and reboots into CrossInk.
+- **CrossInk → MicroSlate:** root home menu → **MicroSlate** → confirm.
 
 Both directions write otadata as a "pending" entry; the booted app confirms itself
 valid on the next boot, so the switch sticks across further reboots.
 
 ## Notes
 
-- MicroSlate labels the other app generically (`OTA Slot N`) because CrossInk
-  doesn't register a friendly name in MicroSlate's NVS — that's cosmetic.
-- If a switch ever appears to do nothing, re-flash the intended-primary app via SD
-  (that rewrites the inactive slot and becomes active).
+- MicroSlate's switch entry is labelled **"CrossInk"** and asks for confirmation.
+- **Updating an app later — trap:** the OEM SD recovery always writes the *inactive*
+  slot. If you've switched to app *X* and then flash *X*, the inactive slot is the
+  *other* app, so you overwrite the other app with X (you end up with two copies of X).
+  Safe options: (a) re-run the full 2-flash install (CrossInk then MicroSlate) — this
+  is foolproof from any state; or (b) switch to the *other* app first, then flash the
+  target app so its own slot is the one rewritten.
