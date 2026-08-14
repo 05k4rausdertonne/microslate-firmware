@@ -12,6 +12,7 @@ extern bool autoReconnectEnabled;
 extern bool darkMode;
 extern bool cleanMode;
 extern bool deleteConfirmPending;
+extern bool switchAppConfirmPending;
 extern WritingMode writingMode;
 extern FontSize fontSize;
 extern bool showWordCount;
@@ -299,6 +300,16 @@ static void dispatchEvent(const KeyEvent& event) {
   switch (currentState) {
     case UIState::MAIN_MENU: {
       int menuCount = 4 + otaAppCount;
+      if (switchAppConfirmPending) {
+        if (event.keyCode == HID_KEY_ENTER) {
+          switchAppConfirmPending = false;
+          switchToOtaApp(mainMenuSelection - 4);
+        } else {
+          switchAppConfirmPending = false;
+          screenDirty = true;
+        }
+        break;
+      }
       if (event.keyCode == HID_KEY_DOWN) {
         mainMenuSelection = (mainMenuSelection + 1) % menuCount;
         screenDirty = true;
@@ -321,7 +332,8 @@ static void dispatchEvent(const KeyEvent& event) {
           currentState = UIState::WIFI_SYNC;
           screenDirty = true;
         } else if (mainMenuSelection >= 4) {
-          switchToOtaApp(mainMenuSelection - 4);
+          switchAppConfirmPending = true;
+          screenDirty = true;
         }
       }
       break;

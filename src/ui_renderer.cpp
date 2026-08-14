@@ -16,6 +16,7 @@ extern bool autoReconnectEnabled;
 extern bool darkMode;
 extern bool cleanMode;
 extern bool deleteConfirmPending;
+extern bool switchAppConfirmPending;
 extern WritingMode writingMode;
 extern FontSize fontSize;
 extern bool showWordCount;
@@ -184,7 +185,7 @@ void drawMainMenu(GfxRenderer& renderer, HalGPIO& gpio) {
   int menuCount = 4 + otaAppCount;
   for (int i = 0; i < menuCount; i++) {
     int yPos = 90 + (i * 45);
-    const char* label = (i < 4) ? baseMenuItems[i] : otaApps[i - 4].name;
+    const char* label = (i < 4) ? baseMenuItems[i] : "CrossInk";
     if (i == mainMenuSelection) {
       clippedFillRect(renderer, 5, yPos - 5, sw - 10, 35, tc);
       drawClippedText(renderer, FONT_UI, 20, yPos, label, sw - 40, !tc);
@@ -197,7 +198,10 @@ void drawMainMenu(GfxRenderer& renderer, HalGPIO& gpio) {
   constexpr int bm = 60;
   if (sh > bm + 40) {
     clippedLine(renderer, 10, sh - bm, sw - 10, sh - bm, tc);
-    drawClippedText(renderer, FONT_SMALL, 20, sh - bm + 12, "Arrows: Navigate  Enter: Select", 0, tc);
+    drawClippedText(renderer, FONT_SMALL, 20, sh - bm + 12,
+                    switchAppConfirmPending ? "Switch to CrossInk?  Enter:Yes  Esc:No"
+                                            : "Arrows: Navigate  Enter: Select",
+                    0, tc);
     drawBleStatus(renderer, 20, sh - bm + 28);
   }
   drawBattery(renderer, gpio);
