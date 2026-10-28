@@ -1,6 +1,6 @@
 # MicroSlate
 
-> ## Fork notes (lvturner)
+> ## Fork notes (05k4rausdertonne)
 >
 > This fork fixes MicroSlate reverting to stock firmware when installed via the
 > **SD-card OEM bootloader recovery** on a USB-locked Xteink X4 (HID-only USB,
@@ -10,7 +10,9 @@
 >
 > - **How to build & flash (SD card):** see [`docs/SD-CARD-INSTALL.md`](docs/SD-CARD-INSTALL.md)
 > - **Build failure on Fedora Silverblue / symlinked `/home`:** run [`scripts/fix-platformio-home-symlink.sh`](scripts/fix-platformio-home-symlink.sh)
-> - The single code change is in [`src/main.cpp`](src/main.cpp) (end of `setup()`).
+> - **German QWERTZ keyboard layout:** configurable via **Settings → Keyboard Layout** (default QWERTZ). Umlauts (ä, ö, ü), eszett (ß), euro (€), and other German characters work correctly with proper UTF-8 handling.
+> - **USB-locked X4 recovery:** works on USB-locked Xteink X4 (HID-only USB, no serial). No serial port needed.
+> - The code changes are in [`src/config.h`](src/config.h), [`src/main.cpp`](src/main.cpp), [`src/input_handler.cpp`](src/input_handler.cpp), [`src/input_handler.h`](src/input_handler.h), [`src/ui_renderer.cpp`](src/ui_renderer.cpp), and [`src/wifi_sync.cpp`](src/wifi_sync.cpp).
 
 A dedicated writing firmware for the **Xteink X4** e-paper device. Pairs with any **Bluetooth LE (BLE)** keyboard and saves notes to MicroSD.
 

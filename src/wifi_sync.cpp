@@ -2,6 +2,7 @@
 #include "config.h"
 #include "file_manager.h"
 #include "sd_backup.h"
+#include "input_handler.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -610,8 +611,7 @@ void syncHandleKey(uint8_t keyCode, uint8_t modifiers) {
           screenDirty = true;
         }
       } else {
-        // Printable character — reuse hidToAscii from input_handler
-        extern char hidToAscii(uint8_t hid, uint8_t modifiers);
+        // Printable character
         char c = hidToAscii(keyCode, modifiers);
         if (c != 0 && c >= ' ' && c != '\n' && c != '\t' && passwordLen < MAX_PASSWORD_LEN) {
           passwordBuf[passwordLen++] = c;

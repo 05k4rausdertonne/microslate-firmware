@@ -62,6 +62,7 @@ bool switchAppConfirmPending = false;
 WritingMode writingMode = WritingMode::NORMAL;
 FontSize fontSize = FontSize::LARGE;
 bool showWordCount = true;
+KeyboardLayout keyboardLayout = KeyboardLayout::QWERTZ;
 
 // --- OTA App Detection ---
 OtaAppEntry otaApps[MAX_OTA_APPS];

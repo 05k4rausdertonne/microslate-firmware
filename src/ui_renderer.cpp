@@ -20,6 +20,7 @@ extern bool switchAppConfirmPending;
 extern WritingMode writingMode;
 extern FontSize fontSize;
 extern bool showWordCount;
+extern KeyboardLayout keyboardLayout;
 
 // External functions
 uint32_t getCurrentPasskey();
@@ -510,11 +511,12 @@ void drawSettingsMenu(GfxRenderer& renderer, HalGPIO& gpio) {
   drawBattery(renderer, gpio);
   clippedLine(renderer, 5, 32, sw - 5, 32, !darkMode);
 
-  // Setting items: Orientation, Dark Mode, Writing Mode, Font Size, Bluetooth, Paired Keyboards
+  // Setting items: Orientation, Dark Mode, Writing Mode, Font Size, Keyboard Layout, Bluetooth, Paired Keyboards
   static const char* labels[] = {
-    "Orientation", "Dark Mode", "Writing Mode", "Font Size", "Bluetooth", "Paired Keyboards"
+    "Orientation", "Dark Mode", "Writing Mode", "Font Size",
+    "Keyboard Layout", "Bluetooth", "Paired Keyboards"
   };
-  const int SETTINGS_COUNT = 6;
+  const int SETTINGS_COUNT = 7;
 
   // Compute line height to fit all items — use smaller spacing if needed
   int lineH = 38;
@@ -558,6 +560,8 @@ void drawSettingsMenu(GfxRenderer& renderer, HalGPIO& gpio) {
         case FontSize::MEDIUM: strcpy(val, "Medium"); break;
         default:               strcpy(val, "Large"); break;
       }
+    } else if (i == 4) {
+      strcpy(val, keyboardLayout == KeyboardLayout::QWERTZ ? "QWERTZ" : "QWERTY");
     } else if (i == 5) {
       int kbCount = getPairedKeyboardCount();
       if (kbCount == 0) strcpy(val, "None");

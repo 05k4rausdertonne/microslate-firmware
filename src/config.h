@@ -87,6 +87,9 @@ static constexpr int MAX_LINES = 1024;
 // --- Font Size ---
 enum class FontSize : uint8_t { SMALL = 0, MEDIUM = 1, LARGE = 2 };
 
+// --- Keyboard Layout ---
+enum class KeyboardLayout : uint8_t { QWERTY = 0, QWERTZ = 1 };
+
 inline int editorFontId(FontSize size) {
   switch (size) {
     case FontSize::SMALL:  return FONT_UI;    // notosans 12
@@ -136,6 +139,11 @@ inline bool isCtrl(uint8_t mod) {
 }
 inline bool isShift(uint8_t mod) {
   return (mod & MOD_SHIFT_LEFT) || (mod & MOD_SHIFT_RIGHT);
+}
+
+inline bool isAltGr(uint8_t mod) {
+  return (mod & MOD_CTRL_LEFT) || (mod & MOD_CTRL_RIGHT) ||
+         (mod & MOD_ALT_RIGHT);
 }
 
 // --- Debug Logging ---

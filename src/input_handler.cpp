@@ -16,6 +16,7 @@ extern bool switchAppConfirmPending;
 extern WritingMode writingMode;
 extern FontSize fontSize;
 extern bool showWordCount;
+extern KeyboardLayout keyboardLayout;
 
 // External functions
 void storePairedDevice(const std::string& address, const std::string& name);
@@ -34,6 +35,9 @@ static volatile bool queueFull = false;
 
 // --- CapsLock state ---
 static bool capsLockOn = false;
+
+// --- Shared UTF-8 output buffer (used by hidToAsciiUTF8 and legacy hidToAscii) ---
+extern char utf8buf[4];
 
 // Where to return after title edit is confirmed or cancelled
 static UIState renameReturnState = UIState::FILE_BROWSER;
@@ -94,44 +98,170 @@ static KeyEvent dequeueKeyEvent() {
   return event;
 }
 
-char hidToAscii(uint8_t hid, uint8_t modifiers) {
+// UTF-8 output buffer (shared between hidToAsciiUTF8 and callers)
+char utf8buf[4];
+
+int hidToAsciiUTF8(uint8_t hid, uint8_t modifiers) {
   bool shifted = isShift(modifiers) ^ capsLockOn;
+  bool altGr   = isAltGr(modifiers);
+  bool qwertz  = (keyboardLayout == KeyboardLayout::QWERTZ);
 
-  // Letters a-z (HID 0x04-0x1D)
+  // --- Letter keys ---
   if (hid >= 0x04 && hid <= 0x1D) {
+    // AltGr specials must be handled here (letter path returns first)
+    if (qwertz && altGr) {
+      if (hid == 0x14) { utf8buf[0] = '@'; return 1; }  // @ on Q
+      if (hid == 0x08) { utf8buf[0]='\342'; utf8buf[1]='\202'; utf8buf[2]='\254'; return 3; }  // € on E
+      if (hid == 0x10) { utf8buf[0]='\302'; utf8buf[1]='\265'; return 2; }  // µ on M
+    }
+    if (qwertz) {
+      if (hid == 0x1C) { utf8buf[0] = shifted ? 'Z' : 'z'; return 1; }
+      if (hid == 0x1D) { utf8buf[0] = shifted ? 'Y' : 'y'; return 1; }
+    }
     char base = 'a' + (hid - 0x04);
-    return shifted ? (base - 32) : base;
+    utf8buf[0] = shifted ? (base - 32) : base;
+    return 1;
   }
 
-  // Number row (HID 0x1E-0x27)
-  static const char unshifted[] = "1234567890";
-  static const char shiftedNum[] = "!@#$%^&*()";
+  // --- Number row (HID 0x1E-0x27) ---
   if (hid >= 0x1E && hid <= 0x27) {
-    int idx = hid - 0x1E;
-    return isShift(modifiers) ? shiftedNum[idx] : unshifted[idx];
+    if (qwertz && altGr) {
+      switch (hid) {
+        case 0x1F: utf8buf[0]='\302'; utf8buf[1]='\262'; return 2; // ²
+        case 0x20: utf8buf[0]='\302'; utf8buf[1]='\263'; return 2; // ³
+        case 0x21: utf8buf[0] = '@';                     return 1;
+        case 0x23: utf8buf[0] = '"';                     return 1;
+        case 0x24: utf8buf[0] = '{';                     return 1;
+        case 0x25: utf8buf[0] = '[';                     return 1;
+        case 0x26: utf8buf[0] = ']';                     return 1;
+        case 0x27: utf8buf[0] = '}';                     return 1;
+      }
+      return 0;
+    }
+    if (qwertz) {
+      // Explicit per-key mapping — de_sh[] string literal is invalid because §/$ are multi-byte UTF-8
+      static const char* de_us  = "1234567890";
+      static const char de_us0  = '1', de_us1  = '2', de_us2  = '3', de_us3  = '4';
+      static const char de_us4  = '5', de_us5  = '6', de_us6  = '7', de_us7  = '8';
+      static const char de_us8  = '9', de_us9  = '0';
+      static const char de_sh0  = '!';  // 1
+      static const char de_sh1  = '"'; // 2
+      static const char de_sh2a = '\302', de_sh2b = '\247'; // §
+      static const char de_sh3  = '$';  // 4
+      static const char de_sh4  = '%';  // 5
+      static const char de_sh5  = '&';  // 6
+      static const char de_sh6  = '/';  // 7
+      static const char de_sh7  = '(';  // 8
+      static const char de_sh8  = ')';  // 9
+      static const char de_sh9  = '=';  // 0
+      if (shifted) {
+        switch (hid - 0x1E) {
+          case 0: utf8buf[0] = de_sh0;  return 1;
+          case 1: utf8buf[0] = de_sh1;  return 1;
+          case 2: utf8buf[0] = de_sh2a; utf8buf[1] = de_sh2b; return 2; // §
+          case 3: utf8buf[0] = de_sh3;  return 1;
+          case 4: utf8buf[0] = de_sh4;  return 1;
+          case 5: utf8buf[0] = de_sh5;  return 1;
+          case 6: utf8buf[0] = de_sh6;  return 1;
+          case 7: utf8buf[0] = de_sh7;  return 1;
+          case 8: utf8buf[0] = de_sh8;  return 1;
+          case 9: utf8buf[0] = de_sh9;  return 1;
+        }
+      }
+      utf8buf[0] = de_us0 + (hid - 0x1E); return 1;
+    }
+    static const char us_us[] = "1234567890";
+    static const char us_sh[] = "!@#$%^&*()";
+    utf8buf[0] = shifted ? us_sh[hid-0x1E] : us_us[hid-0x1E];
+    return 1;
   }
 
-  // Special keys
-  switch (hid) {
-    case 0x28: return '\n';  // Enter
-    case 0x2B: return '\t';  // Tab
-    case 0x2C: return ' ';   // Space
+  // --- AltGr special keys (non-letter) ---
+  if (altGr) {
+    switch (hid) {
+      case 0x2D: utf8buf[0] = '\\';                     return 1;  // \ (on ß)
+      case 0x30: utf8buf[0] = '~';                      return 1;  // ~ (on =)
+      case 0x31: utf8buf[0] = '|';                     return 1;  // | (on #)
+    }
+    return 0;
+  }
 
-    // Symbol keys
-    case 0x2D: return isShift(modifiers) ? '_' : '-';
-    case 0x2E: return isShift(modifiers) ? '+' : '=';
-    case 0x2F: return isShift(modifiers) ? '{' : '[';
-    case 0x30: return isShift(modifiers) ? '}' : ']';
-    case 0x31: return isShift(modifiers) ? '|' : '\\';
-    case 0x33: return isShift(modifiers) ? ':' : ';';
-    case 0x34: return isShift(modifiers) ? '"' : '\'';
-    case 0x35: return isShift(modifiers) ? '~' : '`';
-    case 0x36: return isShift(modifiers) ? '<' : ',';
-    case 0x37: return isShift(modifiers) ? '>' : '.';
-    case 0x38: return isShift(modifiers) ? '?' : '/';
+  // --- Special keys ---
+  switch (hid) {
+    case 0x28: utf8buf[0] = '\n'; return 1;
+    case 0x2B: utf8buf[0] = '\t'; return 1;
+    case 0x2C: utf8buf[0] = ' ';  return 1;
+
+    // ß / ? (US = - / _)
+    case 0x2D:
+      if (qwertz) {
+        if (shifted) { utf8buf[0] = '?'; return 1; }  // ?
+        utf8buf[0]='\303'; utf8buf[1]='\237'; return 2;                    // ß
+      }
+      utf8buf[0] = shifted ? '_' : '-'; return 1;
+
+    // ^ / ° (US = = / +)
+    case 0x2E:
+      if (qwertz) {
+        if (shifted) { utf8buf[0]='\302'; utf8buf[1]='\260'; return 2; }  // °
+        utf8buf[0] = '^'; return 1;
+      }
+      utf8buf[0] = shifted ? '+' : '='; return 1;
+
+    // Ü / ü (US = [ / {)
+    case 0x2F:
+      if (qwertz) {
+        if (shifted) { utf8buf[0]='\303'; utf8buf[1]='\234'; return 2; }  // Ü
+        utf8buf[0]='\303'; utf8buf[1]='\274'; return 2;                    // ü
+      }
+      utf8buf[0] = shifted ? '{' : '['; return 1;
+
+    // + / * (US = ] / })
+    case 0x30:
+      if (qwertz) { utf8buf[0] = shifted ? '*' : '+'; return 1; }
+      utf8buf[0] = shifted ? '}' : ']'; return 1;
+
+    // # / $ (US = \ / |)
+    case 0x31:
+      if (qwertz) { utf8buf[0] = shifted ? '$' : '#'; return 1; }
+      utf8buf[0] = shifted ? '|' : '\\'; return 1;
+
+    // Ö / ö (US = ; / :)
+    case 0x33:
+      if (qwertz) {
+        if (shifted) { utf8buf[0]='\303'; utf8buf[1]='\226'; return 2; }  // Ö
+        utf8buf[0]='\303'; utf8buf[1]='\266'; return 2;                    // ö
+      }
+      utf8buf[0] = shifted ? ':' : ';'; return 1;
+
+    // Ä / ä (US = ' / ")
+    case 0x34:
+      if (qwertz) {
+        if (shifted) { utf8buf[0]='\303'; utf8buf[1]='\204'; return 2; }  // Ä
+        utf8buf[0]='\303'; utf8buf[1]='\244'; return 2;                    // ä
+      }
+      utf8buf[0] = shifted ? '"' : '\''; return 1;
+
+    // ` / ´ (US = ` / ~)
+    case 0x35:
+      if (qwertz) {
+        if (shifted) { utf8buf[0]='\302'; utf8buf[1]='\264'; return 2; }  // ´
+        utf8buf[0] = '\140';       return 1;                  // `
+      }
+      utf8buf[0] = shifted ? '~' : '`'; return 1;
+
+    case 0x36: if (qwertz) { utf8buf[0] = shifted ? ';' : ','; return 1; } utf8buf[0] = shifted ? '<' : ','; return 1;
+    case 0x37: if (qwertz) { utf8buf[0] = shifted ? ':' : '.'; return 1; } utf8buf[0] = shifted ? '>' : '.'; return 1;
+    case 0x38: if (qwertz) { if (shifted) { utf8buf[0] = '>'; return 1; } if (altGr) { utf8buf[0] = '|'; return 1; } utf8buf[0] = '<'; return 1; } utf8buf[0] = shifted ? '|' : '\\'; return 1;
 
     default: return 0;
   }
+}
+
+// Legacy wrapper — returns first byte (for backwards compat with wifi_sync.cpp)
+char hidToAscii(uint8_t hid, uint8_t modifiers) {
+  hidToAsciiUTF8(hid, modifiers);
+  return utf8buf[0];
 }
 
 // Handle text editor input
@@ -225,11 +355,11 @@ static void handleEditorKey(uint8_t keyCode, uint8_t modifiers) {
   }
 
   // Printable character
-  char c = hidToAscii(keyCode, modifiers);
-  if (c != 0) {
-    editorInsertChar(c);
-    screenDirty = true;
+  int n = hidToAsciiUTF8(keyCode, modifiers);
+  for (int i = 0; i < n; i++) {
+    editorInsertChar(utf8buf[i]);
   }
+  if (n > 0) screenDirty = true;
 }
 
 // Open the title edit screen, returning to `returnTo` on confirm/cancel
@@ -286,12 +416,12 @@ static void handleRenameKey(uint8_t keyCode, uint8_t modifiers) {
   }
 
   // Allow all printable characters in a title (including spaces)
-  char c = hidToAscii(keyCode, modifiers);
-  if (c != 0 && c >= ' ' && renameBufferLen < MAX_TITLE_LEN - 1) {
-    renameBuffer[renameBufferLen++] = c;
-    renameBuffer[renameBufferLen] = '\0';
-    screenDirty = true;
+  int n = hidToAsciiUTF8(keyCode, modifiers);
+  for (int i = 0; i < n && renameBufferLen < MAX_TITLE_LEN - 1; i++) {
+    renameBuffer[renameBufferLen++] = utf8buf[i];
   }
+  renameBuffer[renameBufferLen] = '\0';
+  if (n > 0) screenDirty = true;
 }
 
 static void dispatchEvent(const KeyEvent& event) {
@@ -392,7 +522,7 @@ static void dispatchEvent(const KeyEvent& event) {
       break;
 
     case UIState::SETTINGS: {
-      const int SETTINGS_COUNT = 6;  // Orientation, Dark Mode, Writing Mode, Font Size, Bluetooth, Paired Keyboards
+      const int SETTINGS_COUNT = 7;  // Orientation, Dark Mode, Writing Mode, Font Size, Keyboard Layout, Bluetooth, Paired Keyboards
 
       // Up/Down: navigate settings list (physical buttons also map here)
       if (event.keyCode == HID_KEY_DOWN) {
@@ -416,8 +546,11 @@ static void dispatchEvent(const KeyEvent& event) {
           int v = static_cast<int>(fontSize);
           fontSize = static_cast<FontSize>((v + 1) % 3);
         } else if (settingsSelection == 4) {
-          currentState = UIState::BLUETOOTH_SETTINGS;
+          int v = static_cast<int>(keyboardLayout);
+          keyboardLayout = static_cast<KeyboardLayout>((v + 1) % 2);
         } else if (settingsSelection == 5) {
+          currentState = UIState::BLUETOOTH_SETTINGS;
+        } else if (settingsSelection == 6) {
           pairedKeyboardSelection = 0;
           currentState = UIState::PAIRED_KEYBOARDS;
         }
@@ -436,6 +569,9 @@ static void dispatchEvent(const KeyEvent& event) {
         } else if (settingsSelection == 3) {
           int v = static_cast<int>(fontSize);
           fontSize = static_cast<FontSize>((v - 1 + 3) % 3);
+        } else if (settingsSelection == 4) {
+          int v = static_cast<int>(keyboardLayout);
+          keyboardLayout = static_cast<KeyboardLayout>((v + 1) % 2);
         }
         screenDirty = true;
 
