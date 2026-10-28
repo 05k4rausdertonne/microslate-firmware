@@ -11,10 +11,11 @@
 > - **How to build & flash (SD card):** see [`docs/SD-CARD-INSTALL.md`](docs/SD-CARD-INSTALL.md)
 > - **Build failure on Fedora Silverblue / symlinked `/home`:** run [`scripts/fix-platformio-home-symlink.sh`](scripts/fix-platformio-home-symlink.sh)
 > - The single code change is in [`src/main.cpp`](src/main.cpp) (end of `setup()`).
-
+>
 > ## Fork notes (05k4rausdertonne)
 >
 > This fork adds support for ISO-DE QWERTZ keyboard layout
+>
 > - **German QWERTZ keyboard layout:** configurable via **Settings → Keyboard Layout** (default QWERTZ). Umlauts (ä, ö, ü), eszett (ß), euro (€), and other German characters work correctly with proper UTF-8 handling.
 > - The code changes are in [`src/config.h`](src/config.h), [`src/main.cpp`](src/main.cpp), [`src/input_handler.cpp`](src/input_handler.cpp), [`src/input_handler.h`](src/input_handler.h), [`src/ui_renderer.cpp`](src/ui_renderer.cpp), and [`src/wifi_sync.cpp`](src/wifi_sync.cpp).
 
